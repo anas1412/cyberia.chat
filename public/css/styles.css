@@ -1,0 +1,21 @@
+/* Subtle animation for chat container */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-container {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Hover effect for messages */
+.message:hover {
+  transform: translateX(5px);
+  transition: transform 0.2s ease-in-out;
+}

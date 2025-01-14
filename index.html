@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat App</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+  </head>
+  <body style="background-color: #070a29">
+    <div x-data="mainApp">
+      <!-- Login Screen -->
+      <div
+        x-show="currentScreen === 'login'"
+        class="flex flex-col items-center justify-center h-screen"
+      >
+        <img
+          src="/images/cyberia.jpg"
+          alt="Logo"
+          class="mb-6 w-64 rounded-lg"
+        />
+        <div class="relative">
+          <i class="fas fa-user absolute left-3 top-3 text-gray-400"></i>
+          <input
+            type="text"
+            x-model="userName"
+            @keyup.enter="login"
+            placeholder="Enter your name"
+            class="p-2 pl-10 border border-gray-600 rounded-lg bg-gray-700 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button
+          @click="login"
+          class="mt-4 bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center space-x-2"
+        >
+          <i class="fas fa-sign-in-alt"></i>
+          <span>Enter</span>
+        </button>
+      </div>
+
+      <!-- Loading Screen -->
+      <div
+        x-show="currentScreen === 'loading'"
+        class="flex flex-col items-center justify-center h-screen"
+      >
+        <i class="fas fa-circle-notch fa-spin fa-3x text-blue-500"></i>
+        <p class="mt-4 text-gray-200">Connecting...</p>
+      </div>
+
+      <!-- Main Chat Screen -->
+      <div x-show="currentScreen === 'chat'" class="h-screen flex">
+        <!-- Left Sidebar - Settings -->
+        <div
+          class="w-64 bg-gray-900 p-4 flex flex-col border-r border-gray-700"
+        >
+          <!-- User Profile Section -->
+          <div class="mb-6 text-center">
+            <div class="relative inline-block group mb-2">
+              <img
+                :src="userAvatar || 'https://via.placeholder.com/100'"
+                class="w-20 h-20 rounded-full mx-auto cursor-pointer border-2 border-blue-500"
+                @click="showAvatarModal = true"
+              />
+              <div
+                class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <i class="fas fa-camera text-white"></i>
+              </div>
+            </div>
+            <h3
+              x-text="userName"
+              class="text-lg font-medium text-gray-200"
+            ></h3>
+          </div>
+
+          <!-- Settings Menu -->
+          <nav class="flex-1">
+            <div class="space-y-2">
+              <button
+                @click="showSettingsModal = true"
+                class="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <i class="fas fa-user-edit"></i>
+                <span>Edit Profile</span>
+              </button>
+
+              <button
+                @click="showThemeModal = true"
+                class="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <i class="fas fa-paint-brush"></i>
+                <span>Theme Settings</span>
+              </button>
+
+              <button
+                @click="showNotificationSettings = true"
+                class="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <i class="fas fa-bell"></i>
+                <span>Notifications</span>
+              </button>
+
+              <button
+                @click="clearMessages"
+                class="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <i class="fas fa-trash-alt"></i>
+                <span>Clear Messages</span>
+              </button>
+
+              <button
+                @click="logout"
+                class="w-full flex items-center space-x-3 px-4 py-2 text-red-400 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+              </button>
+            </div>
+          </nav>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="flex-1 flex flex-col">
+          <!-- Chat Header -->
+          <div
+            class="bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700"
+          >
+            <h1 class="text-2xl font-bold text-gray-100 flex items-center">
+              <i class="fas fa-comments mr-3"></i>
+              Chat Room
+            </h1>
+          </div>
+
+          <!-- Chat Messages -->
+          <div class="flex-1 overflow-y-auto p-4" x-ref="chatContainer">
+            <template x-for="message in sortedMessages" :key="message._id">
+              <div
+                class="message mb-4 bg-gray-700 rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <div class="flex items-start space-x-3">
+                  <img
+                    :src="getUserAvatar(message.user)"
+                    class="w-8 h-8 rounded-full"
+                    alt="User avatar"
+                  />
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-2">
+                      <span
+                        class="font-medium text-blue-400"
+                        x-text="message.user"
+                      ></span>
+                      <span
+                        class="text-xs text-gray-400"
+                        x-text="formatTimestamp(message.timestamp)"
+                      ></span>
+                    </div>
+                    <p class="text-gray-200 mt-1" x-text="message.text"></p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Message Input -->
+          <div class="bg-gray-800 p-4 border-t border-gray-700">
+            <form @submit.prevent="sendMessage" class="flex space-x-2">
+              <div class="relative flex-1">
+                <i class="fas fa-pen absolute left-3 top-3 text-gray-400"></i>
+                <input
+                  type="text"
+                  x-model="newMessage"
+                  @keyup.enter="sendMessage"
+                  placeholder="Type a message..."
+                  class="w-full p-2 pl-10 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-200 placeholder-gray-400"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
+              >
+                <i class="fas fa-paper-plane"></i>
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Right Sidebar - Online Users -->
+        <div class="w-64 bg-gray-900 p-4 border-l border-gray-700">
+          <div class="mb-4">
+            <h3
+              class="text-lg font-medium text-gray-200 mb-2 flex items-center"
+            >
+              <i class="fas fa-users mr-2"></i>
+              Online Users
+              <span
+                class="ml-2 bg-green-500 text-xs rounded-full px-2 py-1"
+                x-text="onlineUsers.length"
+              ></span>
+            </h3>
+          </div>
+          <div class="space-y-2">
+            <template x-for="user in onlineUsers" :key="user.id">
+              <div
+                class="flex items-center space-x-2 p-2 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <div class="relative">
+                  <img
+                    :src="user.avatar || 'https://via.placeholder.com/32'"
+                    class="w-8 h-8 rounded-full"
+                    alt="User avatar"
+                  />
+                  <div
+                    class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"
+                  ></div>
+                </div>
+                <span class="text-gray-300" x-text="user.name"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modals -->
+      <!-- Settings Modal -->
+      <div
+        x-show="showSettingsModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+        @click.self="showSettingsModal = false"
+      >
+        <div class="bg-gray-800 rounded-lg p-6 w-96">
+          <h3 class="text-xl font-bold text-gray-200 mb-4">Edit Profile</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-gray-300 mb-2">Display Name</label>
+              <input
+                type="text"
+                x-model="editingName"
+                class="w-full p-2 border border-gray-600 rounded-lg bg-gray-700 text-gray-200"
+              />
+            </div>
+            <div class="flex justify-end space-x-2">
+              <button
+                @click="showSettingsModal = false"
+                class="px-4 py-2 text-gray-400 hover:text-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                @click="saveSettings"
+                class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("alpine:init", () => {
+        Alpine.data("mainApp", () => ({
+          currentScreen: "login",
+          userName: "",
+          newMessage: "",
+          messages: [],
+          socket: null,
+          showSettingsModal: false,
+          editingName: "",
+          userAvatar: null,
+          showAvatarModal: false,
+          showThemeModal: false,
+          showNotificationSettings: false,
+          onlineUsers: [],
+          sessionToken: null,
+
+          async init() {
+            this.sessionToken = localStorage.getItem("chatSessionToken");
+            this.initializeSocket();
+            const storedUsername = localStorage.getItem("chatUsername");
+            if (this.sessionToken && storedUsername) {
+              this.userName = storedUsername;
+              this.login(true);
+            }
+          },
+
+          async getNewSessionToken() {
+            try {
+              const response = await fetch("/session", { method: "POST" });
+              const data = await response.json();
+              this.sessionToken = data.sessionToken;
+              localStorage.setItem("chatSessionToken", this.sessionToken);
+            } catch (error) {
+              console.error("Failed to get session token:", error);
+              alert("Failed to initialize session. Please try again.");
+            }
+          },
+
+          initializeSocket() {
+            if (this.socket) {
+              this.socket.disconnect();
+              this.socket = null;
+            }
+            this.socket = io();
+            this.setupSocketListeners();
+          },
+
+          setupSocketListeners() {
+            this.socket.on("newMessage", (message) => {
+              this.messages.push(message);
+              this.$nextTick(() => this.scrollToBottom());
+            });
+
+            this.socket.on("updateOnlineUsers", (users) => {
+              this.onlineUsers = users;
+            });
+
+            this.socket.on("messagesCleared", () => {
+              this.messages = [];
+            });
+
+            this.socket.on("forceDisconnect", (message) => {
+              this.handleDisconnect(message);
+            });
+          },
+
+          handleDisconnect(message) {
+            if (this.socket) {
+              this.socket.disconnect();
+              this.socket = null;
+            }
+            localStorage.removeItem("chatSessionToken");
+            localStorage.removeItem("chatUsername");
+            this.sessionToken = null;
+            this.messages = [];
+            this.onlineUsers = [];
+            this.currentScreen = "login";
+            this.userName = "";
+            this.newMessage = "";
+            alert(message);
+            this.initializeSocket();
+          },
+
+          async login(isAutoLogin = false) {
+            if (this.userName.trim() === "") {
+              alert("Please enter your name");
+              return;
+            }
+            if (!this.socket || !this.socket.connected) {
+              this.initializeSocket();
+            }
+            if (!this.sessionToken) {
+              await this.getNewSessionToken();
+            }
+            if (!isAutoLogin) {
+              this.currentScreen = "loading";
+            }
+            localStorage.setItem("chatUsername", this.userName);
+            setTimeout(
+              () => {
+                this.currentScreen = "chat";
+                this.fetchMessages();
+                this.socket.emit("userJoined", {
+                  name: this.userName,
+                  avatar: this.userAvatar || "https://via.placeholder.com/32",
+                  sessionToken: this.sessionToken,
+                });
+              },
+              isAutoLogin ? 0 : 1500
+            );
+          },
+
+          logout() {
+            if (confirm("Are you sure you want to logout?")) {
+              if (this.socket) {
+                this.socket.disconnect();
+              }
+              localStorage.removeItem("chatSessionToken");
+              localStorage.removeItem("chatUsername");
+              this.sessionToken = null;
+              this.handleDisconnect("Logged out successfully.");
+            }
+          },
+
+          saveSettings() {
+            if (this.editingName.trim()) {
+              this.userName = this.editingName;
+            }
+            this.showSettingsModal = false;
+          },
+
+          async fetchMessages() {
+            try {
+              const response = await fetch("/messages");
+              const data = await response.json();
+              this.messages = data;
+              this.$nextTick(() => this.scrollToBottom());
+            } catch (error) {
+              console.error("Error fetching messages:", error);
+            }
+          },
+
+          sendMessage() {
+            if (!this.newMessage.trim()) return;
+            const messageData = {
+              user: this.userName,
+              text: this.newMessage.trim(),
+            };
+            this.socket.emit("sendMessage", messageData);
+            this.newMessage = "";
+          },
+
+          clearMessages() {
+            if (confirm("Are you sure you want to clear all messages?")) {
+              this.socket.emit("clearMessages");
+            }
+          },
+
+          scrollToBottom() {
+            const container = this.$refs.chatContainer;
+            container.scrollTop = container.scrollHeight;
+          },
+
+          formatTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          },
+
+          get sortedMessages() {
+            return this.messages
+              .slice()
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          },
+
+          getUserAvatar(username) {
+            const user = this.onlineUsers.find((u) => u.name === username);
+            return user ? user.avatar : "https://via.placeholder.com/32";
+          },
+        }));
+      });
+    </script>
+  </body>
+</html>
