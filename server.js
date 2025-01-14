@@ -143,6 +143,31 @@ io.on("connection", (socket) => {
     io.emit("messagesCleared");
   });
 
+  socket.on("updateUsername", async (data) => {
+    const { oldName, newName, sessionToken } = data;
+
+    if (!sessions.has(sessionToken)) {
+      socket.emit("forceDisconnect", "Invalid session");
+      socket.disconnect(true);
+      return;
+    }
+
+    const session = sessions.get(sessionToken);
+    session.username = newName;
+
+    await Message.updateMany({ user: oldName }, { $set: { user: newName } });
+
+    io.emit("usernameUpdated", { oldName, newName });
+
+    const onlineUsers = Array.from(sessions.values()).map((session) => ({
+      id: session.socketId,
+      name: session.username,
+      avatar: session.avatar,
+    }));
+
+    io.emit("updateOnlineUsers", onlineUsers);
+  });
+
   socket.on("disconnect", () => {
     console.log("Socket disconnected:", socket.id);
 

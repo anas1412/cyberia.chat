@@ -89,7 +89,7 @@
           <nav class="flex-1">
             <div class="space-y-2">
               <button
-                @click="showSettingsModal = true"
+                @click="showSettingsModal = true; editingName = userName;"
                 class="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
               >
                 <i class="fas fa-user-edit"></i>
@@ -333,26 +333,43 @@
               this.messages = [];
             });
 
+            this.socket.on("usernameUpdated", (data) => {
+              const { oldName, newName } = data;
+
+              this.messages = this.messages.map((message) => {
+                if (message.user === oldName) {
+                  return { ...message, user: newName };
+                }
+                return message;
+              });
+
+              this.onlineUsers = this.onlineUsers.map((user) => {
+                if (user.name === oldName) {
+                  return { ...user, name: newName };
+                }
+                return user;
+              });
+            });
+
             this.socket.on("forceDisconnect", (message) => {
               this.handleDisconnect(message);
             });
           },
 
-          handleDisconnect(message) {
-            if (this.socket) {
-              this.socket.disconnect();
-              this.socket = null;
+          saveSettings() {
+            if (this.editingName.trim()) {
+              const oldName = this.userName;
+              this.userName = this.editingName.trim();
+              localStorage.setItem("chatUsername", this.userName);
+
+              this.socket.emit("updateUsername", {
+                oldName: oldName,
+                newName: this.userName,
+                sessionToken: this.sessionToken,
+              });
+
+              this.showSettingsModal = false;
             }
-            localStorage.removeItem("chatSessionToken");
-            localStorage.removeItem("chatUsername");
-            this.sessionToken = null;
-            this.messages = [];
-            this.onlineUsers = [];
-            this.currentScreen = "login";
-            this.userName = "";
-            this.newMessage = "";
-            alert(message);
-            this.initializeSocket();
           },
 
           async login(isAutoLogin = false) {
@@ -394,13 +411,6 @@
               this.sessionToken = null;
               this.handleDisconnect("Logged out successfully.");
             }
-          },
-
-          saveSettings() {
-            if (this.editingName.trim()) {
-              this.userName = this.editingName;
-            }
-            this.showSettingsModal = false;
           },
 
           async fetchMessages() {
